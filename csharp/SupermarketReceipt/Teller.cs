@@ -21,13 +21,13 @@ namespace SupermarketReceipt
         {
             var receipt = new Receipt();
             var productQuantities = theCart.GetItems();
-            foreach (var pq in productQuantities)
+            foreach (var productQty in productQuantities)
             {
-                var p = pq.Product;
-                var quantity = pq.Quantity;
-                var unitPrice = _catalog.GetUnitPrice(p);
+                var product = productQty.Product;
+                var quantity = productQty.Quantity;
+                var unitPrice = _catalog.GetUnitPrice(product);
                 var price = quantity * unitPrice;
-                receipt.AddProduct(p, quantity, unitPrice, price);
+                receipt.AddProduct(product, quantity, unitPrice, price);
             }
 
             theCart.HandleOffers(receipt, _offers, _catalog);

@@ -20,7 +20,7 @@ namespace SupermarketReceipt.Test
             cart.AddItemQuantity(apples, 2.5);
 
             var teller = new Teller(catalog);
-            teller.AddSpecialOffer(SpecialOfferType.TenPercentDiscount, toothbrush, 10.0);
+            teller.AddSpecialOffer(SpecialOfferType.PercentageDiscount, toothbrush, 10.0);
 
             // ACT
             var receipt = teller.ChecksOutArticlesFrom(cart);

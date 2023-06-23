@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 
@@ -9,17 +10,19 @@ namespace SupermarketReceipt
         private readonly Dictionary<Product, double> _productQuantities = new Dictionary<Product, double>();
         private static readonly CultureInfo Culture = CultureInfo.CreateSpecificCulture("en-GB");
 
+        private const string PRICE_FORMAT = "N2";
+        private const string PERCENT_FORMAT = "{0}% off";
+        private const string QTY_FOR_AMOUNT_FORMAT = "{0} for {1}";
+        private const string THREE_FOR_TWO = "3 for 2";
+        private const double ONE_HUNDRED_PERCENT = 100.0;
+        private const int THREE_QTY = 3;
+        private const int TWO_QTY = 2;
+        private const int FIVE_QTY = 5;
 
         public List<ProductQuantity> GetItems()
         {
             return new List<ProductQuantity>(_items);
         }
-
-        public void AddItem(Product product)
-        {
-            AddItemQuantity(product, 1.0);
-        }
-
 
         public void AddItemQuantity(Product product, double quantity)
         {
@@ -43,131 +46,85 @@ namespace SupermarketReceipt
                 if (!offers.ContainsKey(product))
                     continue;
 
+                var unitPrice = catalog.GetUnitPrice(product);
                 var offer = offers[product];
                 switch (offer.OfferType)
                 {
                     case SpecialOfferType.ThreeForTwo:
-                        discount = ComputeDiscountForThreeForTwo(product, catalog);
-                        break;
-                    case SpecialOfferType.TenPercentDiscount:
-                        discount = ComputeDiscountForTenPercentDiscount(product, catalog, offer.Argument);
+                        discount = ComputeForThreeForTwoDiscount(product, unitPrice);
                         break;
                     case SpecialOfferType.TwoForAmount:
-                        discount = ComputeDiscountForTwoForAmount(product, catalog, offer.Argument);
+                        discount = ComputeForTwoForAmountDiscount(product, unitPrice, offer.Argument);
                         break;
                     case SpecialOfferType.FiveForAmount:
-                        discount = ComputeDiscountForFiveForAmount(product, offers, catalog);
+                        discount = ComputeForFiveForAmountDiscount(product, unitPrice, offer.Argument);
                         break;
-                    default:
+                    default: /* Should be SpecialOfferType.PercentageDiscount */
+                        discount = ComputeForPercentageDiscount(product, unitPrice, offer.Argument);
                         break;
                 }
 
                 if (discount != null)
                     receipt.AddDiscount(discount);
-            }
-            #region Old
-
-            //foreach (var p in _productQuantities.Keys)
-            //{
-            //    var quantity = _productQuantities[p];
-            //    var quantityAsInt = (int) quantity;
-            //    if (offers.ContainsKey(p))
-            //    {
-            //        var offer = offers[p];
-            //        var unitPrice = catalog.GetUnitPrice(p);
-            //        Discount discount = null;
-            //        var x = 1;
-            //        if (offer.OfferType == SpecialOfferType.ThreeForTwo)
-            //        {
-            //            x = 3;
-            //        }
-            //        else if (offer.OfferType == SpecialOfferType.TwoForAmount)
-            //        {
-            //            x = 2;
-            //            if (quantityAsInt >= 2)
-            //            {
-            //                var total = offer.Argument * (quantityAsInt / x) + quantityAsInt % 2 * unitPrice;
-            //                var discountN = unitPrice * quantity - total;
-            //                discount = new Discount(p, "2 for " + PrintPrice(offer.Argument), -discountN);
-            //            }
-            //        }
-
-            //        if (offer.OfferType == SpecialOfferType.FiveForAmount) x = 5;
-            //        var numberOfXs = quantityAsInt / x;
-            //        if (offer.OfferType == SpecialOfferType.ThreeForTwo && quantityAsInt > 2)
-            //        {
-            //            var discountAmount = quantity * unitPrice - (numberOfXs * 2 * unitPrice + quantityAsInt % 3 * unitPrice);
-            //            discount = new Discount(p, "3 for 2", -discountAmount);
-            //        }
-
-            //        if (offer.OfferType == SpecialOfferType.TenPercentDiscount) discount = new Discount(p, offer.Argument + "% off", -quantity * unitPrice * offer.Argument / 100.0);
-            //        if (offer.OfferType == SpecialOfferType.FiveForAmount && quantityAsInt >= 5)
-            //        {
-            //            var discountTotal = unitPrice * quantity - (offer.Argument * numberOfXs + quantityAsInt % 5 * unitPrice);
-            //            discount = new Discount(p, x + " for " + PrintPrice(offer.Argument), -discountTotal);
-            //        }
-
-            //        if (discount != null)
-            //            receipt.AddDiscount(discount);
-            //    }
-            //}
-            #endregion
+            } 
         }
 
-        private Discount ComputeDiscountForThreeForTwo(Product product, ISupermarketCatalog catalog)
+        private Discount ComputeForPercentageDiscount(Product product, double price, double discount)
         {
             var quantity = _productQuantities[product];
-            var quantityAsInt = (int)quantity;
-            var unitPrice = catalog.GetUnitPrice(product);
-            var numberOfXs = quantityAsInt / 3;
-            if (quantityAsInt < 2)
+            var normalPrice = ComputeNormalPrice(price, quantity);
+            var percentageDiscount = (discount / ONE_HUNDRED_PERCENT);
+            var totalDiscount = normalPrice * percentageDiscount;
+            return new Discount(product, string.Format(PERCENT_FORMAT, discount), -totalDiscount);
+        } 
+
+        private Discount ComputeForThreeForTwoDiscount(Product product, double price)
+        {
+            var quantity = _productQuantities[product];
+            if (quantity <= TWO_QTY)
                 return null;
 
-            var discountAmount = quantity * unitPrice - (numberOfXs * 2 * unitPrice + quantityAsInt % 3 * unitPrice);
-            return new Discount(product, "3 for 2", -discountAmount);
+            var normalPrice = ComputeNormalPrice(price, quantity);
+            var qualifiedSet = ComputeQualifiedSet((int)quantity, THREE_QTY);
+            var totalDiscount = normalPrice - (qualifiedSet * TWO_QTY * price + quantity % THREE_QTY * price);
+            return new Discount(product, THREE_FOR_TWO, -totalDiscount);
         }
 
-        private Discount ComputeDiscountForTenPercentDiscount(Product product, ISupermarketCatalog catalog, double discount)
+        private Discount ComputeForTwoForAmountDiscount(Product product, double price, double assumedPrice)
         {
-            var quantity = _productQuantities[product];
-            var unitPrice = catalog.GetUnitPrice(product);
-            return new Discount(product, discount + "% off", -quantity * unitPrice * discount / 100.0);
+            return ComputeForSpecificQtyDiscount(product, price, assumedPrice, TWO_QTY);
         }
 
-        private Discount ComputeDiscountForTwoForAmount(Product product, ISupermarketCatalog catalog, double assumedPrice)
+        private Discount ComputeForFiveForAmountDiscount(Product product, double price, double assumedPrice)
+        {
+            return ComputeForSpecificQtyDiscount(product, price, assumedPrice, FIVE_QTY);
+        }
+
+        private Discount ComputeForSpecificQtyDiscount(Product product, double price, double assumedPrice, int discountedQty)
         {
             var quantity = _productQuantities[product];
-            var quantityAsInt = (int)quantity;
-            var unitPrice = catalog.GetUnitPrice(product);
-            var x = 2;
-            if (quantityAsInt < 2)
+            if (quantity < discountedQty)
                 return null;
 
-            var total = assumedPrice * (quantityAsInt / x) + quantityAsInt % 2 * unitPrice;
-            var discountN = unitPrice * quantity - total;
-            return new Discount(product, "2 for " + PrintPrice(assumedPrice), -discountN);
-            
+            var normalPrice = ComputeNormalPrice(price, quantity);
+            var qualifiedSet = ComputeQualifiedSet((int)quantity,  discountedQty);
+            var totalDiscount = normalPrice - (assumedPrice * qualifiedSet + quantity % discountedQty * price);
+            return new Discount(product, string.Format(QTY_FOR_AMOUNT_FORMAT, discountedQty, PrintPrice(assumedPrice)), -totalDiscount);
         }
-        private Discount ComputeDiscountForFiveForAmount(Product product, Dictionary<Product, Offer> offers, ISupermarketCatalog catalog)
+
+        private double ComputeNormalPrice(double price, double quantity)
         {
-            var quantity = _productQuantities[product];
-            var quantityAsInt = (int)quantity;
-            var offer = offers[product];
-            var unitPrice = catalog.GetUnitPrice(product);
-            var x = 5;
-            var numberOfXs = quantityAsInt / x;
-
-            if (quantityAsInt < 5)
-                return null;
-
-            var discountTotal = unitPrice * quantity - (offer.Argument * numberOfXs + quantityAsInt % 5 * unitPrice);
-            return new Discount(product, x + " for " + PrintPrice(offer.Argument), -discountTotal);
+            return price * quantity;
         }
 
+        private int ComputeQualifiedSet(int quantity, int discountedQty)
+        {
+            return quantity / discountedQty;
+        }
 
         private string PrintPrice(double price)
         {
-            return price.ToString("N2", Culture);
+            return price.ToString(PRICE_FORMAT, Culture);
         }
     }
 }
