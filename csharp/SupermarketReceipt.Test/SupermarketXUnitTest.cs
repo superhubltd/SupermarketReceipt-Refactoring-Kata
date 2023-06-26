@@ -433,7 +433,6 @@ namespace SupermarketReceipt.Test
         [InlineData("Not Qualified Item with Two for Amount (ex. Two for 100)", ProductUnit.Kilo, 40, 1, SpecialOfferType.TwoForAmount, 40, 40)]
         [InlineData("Not Qualified Item with Two for Amount (ex. Two for 100)", ProductUnit.Kilo, 50, 1, SpecialOfferType.TwoForAmount, 50, 50)]
         #endregion
-
         public void Not_Qualified_Single_Item_With_Special_Offer_Test(string name,
                                                                       ProductUnit unit,
                                                                       double price,
